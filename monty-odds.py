@@ -70,6 +70,7 @@ class BadOddsBot(BotFramework):
 
     def receive_results_message(self, results_list):
         self.percentile = None
+        self.cards = None
         print "received the results of the hand:"
         for r in results_list:
             print "RESULTS: player: %s, winnings: %s, hand: %s" % (r[0], r[1], r[2])
