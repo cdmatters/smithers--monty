@@ -3,6 +3,7 @@ from adjusted_deuces import deuces as dc
 
 import random
 from collections import OrderedDict
+from itertools import combinations
 
 class BadOddsBot(BotFramework):
     '''BadOddsBot is a poker bot that doesnt know how to play the odds in poker.
@@ -29,7 +30,7 @@ class BadOddsBot(BotFramework):
         self.cards = None
         self.board = []
         self.pot = 0
-        self._current_odds = -1
+        self.percentile = -1
         self._deuces_rank = -1
 
 
@@ -61,7 +62,10 @@ class BadOddsBot(BotFramework):
         self.board = [dc.Card.new(b) for b in board]
         if self.cards:
             self._deuces_rank = self.evaluator.evaluate(self.cards, self.board)
-            print (1 - self.evaluator.get_five_card_rank_percentile(self._deuces_rank) )*100
+            self.percentile = self._calculate_exp_percentile(self.cards, self.board, self.evaluator)
+
+
+            # self.percentile = (1 - self.evaluator.get_five_card_rank_percentile(self._deuces_rank))*100
         self.pot = pot
         dc.Card.print_pretty_cards(self.board)
 
@@ -78,8 +82,8 @@ class BadOddsBot(BotFramework):
         print "player: %s won the tournament" % name
 
     def on_move_request(self, min_raise, call, pot, current_bet, chips):
-        print  self._deuces_rank  
-
+        if self.percentile:
+            print self.percentile
         moves = [
             ("RAISE_TO", min_raise),
             ("CALL", call),
@@ -90,6 +94,31 @@ class BadOddsBot(BotFramework):
         move = random.choice(moves)
         print "moved: %s, %s" % move
         return move
+
+    @staticmethod
+    def _calculate_exp_percentile(cards, board, evaluator):
+        if not cards or not board:
+            return -1
+        full_deck = set(dc.Deck.GetFullDeck())
+        active_deck = full_deck - set(cards+board)
+        missing = 5 - len(board) 
+
+        percentiles = []
+
+        combos = combinations(active_deck, missing)
+        for c in combos:
+            new_board = board + list(c)
+            rank = evaluator.evaluate(cards, new_board)
+            percentile = evaluator.get_five_card_rank_percentile(rank)
+            percentiles.append(percentile)
+
+        if not c:
+            rank = evaluator.evaluate(cards, board)
+            percentile = evaluator.get_five_card_rank_percentile(rank)
+            percentiles.append(percentile)
+        
+        mean = float(sum(percentiles))/float(len(percentiles))
+        return (1 - mean) * 100
 
 
 
