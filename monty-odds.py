@@ -29,9 +29,9 @@ class BadOddsBot(BotFramework):
         
         self.cards = None
         self.board = []
-        self.pot = 0
-        self.percentile = -1
-        self._deuces_rank = -1
+        self.pot = None
+        self.percentile = None
+        self._deuces_rank = None
 
 
     def register(self):
@@ -64,13 +64,12 @@ class BadOddsBot(BotFramework):
             self._deuces_rank = self.evaluator.evaluate(self.cards, self.board)
             self.percentile = self._calculate_exp_percentile(self.cards, self.board, self.evaluator)
 
-
-            # self.percentile = (1 - self.evaluator.get_five_card_rank_percentile(self._deuces_rank))*100
         self.pot = pot
         dc.Card.print_pretty_cards(self.board)
 
 
     def receive_results_message(self, results_list):
+        self.percentile = None
         print "received the results of the hand:"
         for r in results_list:
             print "RESULTS: player: %s, winnings: %s, hand: %s" % (r[0], r[1], r[2])
@@ -82,16 +81,25 @@ class BadOddsBot(BotFramework):
         print "player: %s won the tournament" % name
 
     def on_move_request(self, min_raise, call, pot, current_bet, chips):
-        if self.percentile:
-            print self.percentile
         moves = [
             ("RAISE_TO", min_raise),
             ("CALL", call),
             ("FOLD", 0)
         ]
 
+        move = random.choice(moves[:2])
 
-        move = random.choice(moves)
+        if self.percentile:
+            pot_odds = float(call)/float(call+pot)*100
+            print "This hand has expected percentile: %.2f " %(self.percentile)
+            print "The pot odds are: %.2f  " % pot_odds
+            if self.percentile > pot_odds:
+                print "\tPLAY" 
+                move = moves[1]
+            else:
+                print "\tFOLD"
+                moves = moves[2]
+        
         print "moved: %s, %s" % move
         return move
 
