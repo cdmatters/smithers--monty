@@ -24,14 +24,17 @@ class BadOddsBot(BotFramework):
         super(BadOddsBot, self).__init__(name, server_url, listening_socket)
         self.competitors = OrderedDict()
         self.CompetitorModel = dict  # insert your own class here
-        print dir(dc)
         self.evaluator = dc.Evaluator()
         
         self.cards = None
         self.board = []
         self.pot = None
         self.percentile = None
+        self.win_odds = None
         self._deuces_rank = None
+
+        self.not_broke_competitors = 0
+        self.not_folded_competitors = 0
 
 
     def register(self):
@@ -46,13 +49,19 @@ class BadOddsBot(BotFramework):
             self.competitors[c["name"]] = comp
 
     def receive_tournament_start_message(self, players):
+        self.not_broke_competitors = len(self.competitors)
+        self.not_folded_competitors = len(self.competitors)
         print "tournament starting: %s players: %s" % (
                   len(players), ", ".join([p["name"] for p in players]))
 
     def receive_move_message(self, player_name, move, amount, chips_left, is_blind):
-        print "received a move from another " + \
-              "player: %s, move: %s, amount: %s, chips_left: %s, is a blind? %s" % (
-                  player_name, move, amount, chips_left, is_blind)
+        # print "received a move from another " + \
+        #       "player: %s, move: %s, amount: %s, chips_left: %s, is a blind? %s" % (
+        #           player_name, move, amount, chips_left, is_blind)
+        print "%s %s" %(player_name, move)
+        if move=="FOLD":
+            self.not_folded_competitors -= 1
+        pass
 
     def receive_hands_message(self, card1, card2):
         self.cards = [dc.Card.new(card1), dc.Card.new(card2)]
@@ -60,15 +69,25 @@ class BadOddsBot(BotFramework):
 
     def receive_board_message(self, board, pot):
         self.board = [dc.Card.new(b) for b in board]
-        if self.cards:
-            self._deuces_rank = self.evaluator.evaluate(self.cards, self.board)
-            self.percentile = self._calculate_exp_percentile(self.cards, self.board, self.evaluator)
-
-        self.pot = pot
+        if not self.cards:
+            return 
         dc.Card.print_pretty_cards(self.board)
+
+        if len(board) == 3:
+            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator,  10) 
+        elif len(board) == 4:
+            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
+        elif len(board) == 5:
+            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
+
+        print "\t1:2:1 %.2f" %self.win_odds
+        pow(self.win_odds, self.not_folded_competitors)
+        self.win_odds = pow(self.win_odds, self.not_folded_competitors)
 
 
     def receive_results_message(self, results_list):
+        self.not_folded_competitors = self.not_broke_competitors
+        self.win_odds = None
         self.percentile = None
         self.cards = None
         print "received the results of the hand:"
@@ -76,6 +95,7 @@ class BadOddsBot(BotFramework):
             print "RESULTS: player: %s, winnings: %s, hand: %s" % (r[0], r[1], r[2])
 
     def receive_broke_message(self, names):
+        self.not_broke_competitors -= 1
         print "player(s): %s went bust" % (", ".join(names))
 
     def receive_tournament_winner_message(self, name):
@@ -88,46 +108,91 @@ class BadOddsBot(BotFramework):
             ("FOLD", 0)
         ]
 
-        move = random.choice(moves[:2])
-
-        if self.percentile:
-            pot_odds = float(call)/float(call+pot)*100
-            print "This hand has expected percentile: %.2f " %(self.percentile)
-            print "The pot odds are: %.2f  " % pot_odds
-            if self.percentile > pot_odds:
-                print "\tPLAY" 
-                move = moves[1]
+        if self.win_odds:
+            print  "\tTO CALL:", call, " POT: ", pot, " CURRENT BET", current_bet
+            
+            pot_odds = float(call-current_bet)/float(call-current_bet + pot)
+            raise_odds = float(min_raise-current_bet)/float(min_raise-current_bet + pot)
+            
+            print "\tWIN RATE: %.2f  POT ODDS: %.2f" %(self.win_odds*100,pot_odds *100)
+            if self.win_odds >= pot_odds:
+                if raise_odds < self.win_odds:
+                    move = moves[0]
+                else:
+                    move = moves[1]
             else:
-                print "\tFOLD"
-                moves = moves[2]
+                move = moves[2]
+        else:
+            move = moves[1]
         
-        print "moved: %s, %s" % move
+        print "\tmoved: %s, %s" % move
         return move
 
-    @staticmethod
-    def _calculate_exp_percentile(cards, board, evaluator):
+    # @staticmethod
+    # def _calculate_exp_percentile(cards, board, evaluator):
+    #     if not cards or not board:
+    #         return -1
+    #     full_deck = set(dc.Deck.GetFullDeck())
+    #     active_deck = full_deck - set(cards+board)
+    #     missing = 5 - len(board) 
+
+    #     percentiles = []
+
+    #     combos = combinations(active_deck, missing)
+    #     for c in combos:
+    #         new_board = board + list(c)
+    #         rank = evaluator.evaluate(cards, new_board)
+    #         percentile = evaluator.get_five_card_rank_percentile(rank)
+    #         percentiles.append(percentile)
+
+    #     if not c:
+    #         rank = evaluator.evaluate(cards, board)
+    #         percentile = evaluator.get_five_card_rank_percentile(rank)
+    #         percentiles.append(percentile)
+        
+    #     mean = float(sum(percentiles))/float(len(percentiles))
+    #     return (1 - mean) * 100
+
+
+    def monte_carlo_expected_winnings(self, cards, board, evaluator, sample):
         if not cards or not board:
             return -1
+
         full_deck = set(dc.Deck.GetFullDeck())
         active_deck = full_deck - set(cards+board)
-        missing = 5 - len(board) 
+        missing = 5 - len(board)    
 
-        percentiles = []
-
-        combos = combinations(active_deck, missing)
-        for c in combos:
+        winners = []
+        for c in combinations(active_deck, missing):
             new_board = board + list(c)
-            rank = evaluator.evaluate(cards, new_board)
-            percentile = evaluator.get_five_card_rank_percentile(rank)
-            percentiles.append(percentile)
 
-        if not c:
-            rank = evaluator.evaluate(cards, board)
-            percentile = evaluator.get_five_card_rank_percentile(rank)
-            percentiles.append(percentile)
-        
-        mean = float(sum(percentiles))/float(len(percentiles))
-        return (1 - mean) * 100
+            our_hand = evaluator.evaluate(cards, new_board)  
+            result = self.monte_carlo_sample(our_hand, cards, new_board, evaluator, sample)
+    
+            winners.append(result)
+            
+        # print "PROBABILITY OF WINNING %.2f " % (float(sum(winners)*100)/float(len(winners)))
+        return float(sum(winners))/float(len(winners))
+
+    def monte_carlo_sample(self, our_score, our_cards, board, evaluator, sample_number):
+        full_deck = set(dc.Deck.GetFullDeck())
+        active_deck = full_deck - set(our_cards+board)
+        missing = 2
+
+        winners = 0
+
+        combos = [c for c in combinations(active_deck, missing)]
+
+        for their_cards in random.sample(combos, sample_number):
+            their_score = evaluator.evaluate(list(their_cards), board)
+            if our_score <= their_score:
+                winners += 1
+
+        return float(winners)/float(sample_number)
+
+
+
+
 
 
 
