@@ -67,6 +67,8 @@ class BadOddsBot(BotFramework):
         self.cards = [dc.Card.new(card1), dc.Card.new(card2)]
         dc.Card.print_pretty_cards(self.cards)
 
+        self.sklansky =  self.sklansky_hand_ranking(self.cards[0], self.cards[1])
+
     def receive_board_message(self, board, pot):
         self.board = [dc.Card.new(b) for b in board]
         if not self.cards:
@@ -74,7 +76,7 @@ class BadOddsBot(BotFramework):
         dc.Card.print_pretty_cards(self.board)
 
         if len(board) == 3:
-            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator,  10) 
+            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
         elif len(board) == 4:
             self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
         elif len(board) == 5:
@@ -86,6 +88,7 @@ class BadOddsBot(BotFramework):
 
 
     def receive_results_message(self, results_list):
+        self.sklansky = 0
         self.not_folded_competitors = self.not_broke_competitors
         self.win_odds = None
         self.percentile = None
@@ -108,10 +111,10 @@ class BadOddsBot(BotFramework):
             ("FOLD", 0)
         ]
 
+        print  "\tTO CALL:", call, " POT: ", pot, " CURRENT BET", current_bet
         if self.win_odds:
-            print  "\tTO CALL:", call, " POT: ", pot, " CURRENT BET", current_bet
             
-            pot_odds = float(call-current_bet)/float(call-current_bet + pot)
+            pot_odds = float(call)/float(call - current_bet + pot)
             raise_odds = float(min_raise-current_bet)/float(min_raise-current_bet + pot)
             
             print "\tWIN RATE: %.2f  POT ODDS: %.2f" %(self.win_odds*100,pot_odds *100)
@@ -122,37 +125,13 @@ class BadOddsBot(BotFramework):
                     move = moves[1]
             else:
                 move = moves[2]
-        else:
+        elif (self.sklansky < 8 and self.sklansky >0) or call == 0 :
             move = moves[1]
+        else:
+            move = moves[2]
         
         print "\tmoved: %s, %s" % move
         return move
-
-    # @staticmethod
-    # def _calculate_exp_percentile(cards, board, evaluator):
-    #     if not cards or not board:
-    #         return -1
-    #     full_deck = set(dc.Deck.GetFullDeck())
-    #     active_deck = full_deck - set(cards+board)
-    #     missing = 5 - len(board) 
-
-    #     percentiles = []
-
-    #     combos = combinations(active_deck, missing)
-    #     for c in combos:
-    #         new_board = board + list(c)
-    #         rank = evaluator.evaluate(cards, new_board)
-    #         percentile = evaluator.get_five_card_rank_percentile(rank)
-    #         percentiles.append(percentile)
-
-    #     if not c:
-    #         rank = evaluator.evaluate(cards, board)
-    #         percentile = evaluator.get_five_card_rank_percentile(rank)
-    #         percentiles.append(percentile)
-        
-    #     mean = float(sum(percentiles))/float(len(percentiles))
-    #     return (1 - mean) * 100
-
 
     def monte_carlo_expected_winnings(self, cards, board, evaluator, sample):
         if not cards or not board:
@@ -190,6 +169,35 @@ class BadOddsBot(BotFramework):
 
         return float(winners)/float(sample_number)
 
+    @staticmethod
+    def sklansky_hand_ranking(card1, card2):
+        is_same_suit = dc.Card.get_suit_int(card1) == dc.Card.get_suit_int(card2)
+        
+        rank1 = dc.Card.get_rank_int(card1)
+        rank2 = dc.Card.get_rank_int(card2)
+
+        sklansky_matrix = [
+            [1,1,2,2,3,5,6,5,5,5,5,5,5],
+            [2,1,2,3,4,6,7,7,7,7,7,7,7],
+            [3,4,1,3,4,5,7,0,0,0,0,0,0],
+            [4,5,5,1,3,4,6,8,0,0,0,0,0],
+            [6,6,6,5,2,4,5,7,0,0,0,0,0],
+            [8,8,8,7,7,3,4,5,8,0,0,0,0],
+            [0,0,0,8,8,7,4,5,6,8,0,0,0],
+            [0,0,0,0,0,0,8,5,5,6,8,0,0],
+            [0,0,0,0,0,0,0,8,6,7,7,0,0],
+            [0,0,0,0,0,0,0,0,8,6,6,7,0],
+            [0,0,0,0,0,0,0,0,0,8,7,7,8],
+            [0,0,0,0,0,0,0,0,0,0,0,7,8],
+            [0,0,0,0,0,0,0,0,0,0,0,0,7],
+        ]
+
+        coords = sorted([(12 - rank1), (12 - rank2)])
+        
+        if is_same_suit:
+            coords[1], coords[0] = coords[0], coords[1]
+
+        return sklansky_matrix[coords[0]][coords[1]]
 
 
 
