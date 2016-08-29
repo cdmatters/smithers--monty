@@ -109,7 +109,11 @@ class RandomBot(BotFramework):
         else:
             self.fold_pr = float(self.fold_pr)/float(2)
             moves.pop()
-            move = random.choice(moves)
+            raise_now = random.random()
+            if raise_now < 0.25:
+                move = moves[0]
+            else:
+                move = moves[1]
             print "moved: %s, %s" % move
             return move
 
