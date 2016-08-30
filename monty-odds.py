@@ -73,18 +73,20 @@ class BadOddsBot(BotFramework):
         self.board = [dc.Card.new(b) for b in board]
         if not self.cards:
             return 
+
+        dc.Card.print_pretty_cards(self.cards)
         dc.Card.print_pretty_cards(self.board)
 
         if len(board) == 3:
-            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
+            self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 90) 
         elif len(board) == 4:
             self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
         elif len(board) == 5:
             self.win_odds = self.monte_carlo_expected_winnings(self.cards, self.board, self.evaluator, 990) 
 
         print "\t1:2:1 %.2f" %self.win_odds
-        pow(self.win_odds, self.not_folded_competitors)
-        self.win_odds = pow(self.win_odds, self.not_folded_competitors)
+        # pow(self.win_odds, self.not_folded_competitors)
+        # self.win_odds = pow(self.win_odds, self.not_folded_competitors)
 
 
     def receive_results_message(self, results_list):
@@ -113,19 +115,20 @@ class BadOddsBot(BotFramework):
 
         print  "\tTO CALL:", call, " POT: ", pot, " CURRENT BET", current_bet
         if self.win_odds:
+            multiplayer_odds = pow(self.win_odds, self.not_folded_competitors)
             
             pot_odds = float(call)/float(call - current_bet + pot)
             raise_odds = float(min_raise-current_bet)/float(min_raise-current_bet + pot)
             
-            print "\tWIN RATE: %.2f  POT ODDS: %.2f" %(self.win_odds*100,pot_odds *100)
-            if self.win_odds >= pot_odds:
-                if raise_odds < self.win_odds:
+            print "\tWIN RATE: %.2f  POT ODDS: %.2f  HEADSUP ODDS: %.2f" %(multiplayer_odds*100,pot_odds *100, self.win_odds*100 )
+            if multiplayer_odds >= pot_odds:
+                if raise_odds < multiplayer_odds:
                     move = moves[0]
                 else:
                     move = moves[1]
             else:
                 move = moves[2]
-        elif (self.sklansky < 8 and self.sklansky >0) or call == 0 :
+        elif self.sklansky < 8 or call == 0 :
             move = moves[1]
         else:
             move = moves[2]
@@ -179,17 +182,17 @@ class BadOddsBot(BotFramework):
         sklansky_matrix = [
             [1,1,2,2,3,5,6,5,5,5,5,5,5],
             [2,1,2,3,4,6,7,7,7,7,7,7,7],
-            [3,4,1,3,4,5,7,0,0,0,0,0,0],
-            [4,5,5,1,3,4,6,8,0,0,0,0,0],
-            [6,6,6,5,2,4,5,7,0,0,0,0,0],
-            [8,8,8,7,7,3,4,5,8,0,0,0,0],
-            [0,0,0,8,8,7,4,5,6,8,0,0,0],
-            [0,0,0,0,0,0,8,5,5,6,8,0,0],
-            [0,0,0,0,0,0,0,8,6,7,7,0,0],
-            [0,0,0,0,0,0,0,0,8,6,6,7,0],
-            [0,0,0,0,0,0,0,0,0,8,7,7,8],
-            [0,0,0,0,0,0,0,0,0,0,0,7,8],
-            [0,0,0,0,0,0,0,0,0,0,0,0,7],
+            [3,4,1,3,4,5,7,9,9,9,9,9,9],
+            [4,5,5,1,3,4,6,8,9,9,9,9,9],
+            [6,6,6,5,2,4,5,7,9,9,9,9,9],
+            [8,8,8,7,7,3,4,5,8,9,9,9,9],
+            [9,9,9,8,8,7,4,5,6,8,9,9,9],
+            [9,9,9,9,9,9,8,5,5,6,8,9,9],
+            [9,9,9,9,9,9,9,8,6,7,7,9,9],
+            [9,9,9,9,9,9,9,9,8,6,6,7,9],
+            [9,9,9,9,9,9,9,9,9,8,7,7,8],
+            [9,9,9,9,9,9,9,9,9,9,9,7,8],
+            [9,9,9,9,9,9,9,9,9,9,9,9,7],
         ]
 
         coords = sorted([(12 - rank1), (12 - rank2)])
